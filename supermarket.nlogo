@@ -1,12 +1,16 @@
 ;** global variables ********************
-patches-own [ product-price ]
+globals [product-counter]
 
+patches-own [ product-price product-id]
 
+breed [customers customer]
+customers-own [shopping-list nb-product-in-cart cart-value selected-strategy prob-for-change next-destination nb-moves checkout-time]
 
 ;** setup *******************************
 
 to setup
   clear-all
+  set product-counter 0
   setup-store-layout
   reset-ticks
 end
@@ -23,19 +27,76 @@ to setup-store-layout
   ; leave with no product
   ask patch 0 -6 [ set pcolor green ]
   ; create product places
-  ask patches with [pycor > 0 and member? ( pxcor mod 5 )  [0 1 ]] [ set pcolor yellow]
-  ask patches with [pycor > 0 and member? ( pycor mod 12 )  [0 1 10 11] ] [ set pcolor black]
+  ask patches with [pycor > 0 and member? ( pxcor mod 5 )  [0 1] and not member? ( pycor mod 12 )  [0 1 10 11] ]
+    [ set pcolor yellow
+      set product-price random product-max-price
+      set product-id product-counter
+      set product-counter product-counter + 1
+    ]
 end
 
 
 ;** run *********************************
 to go
-
-
-
+  add-customer
 
   tick
 end
+
+to add-customer
+  if count customers < max-customer-number
+  [
+    create-customers 1 [
+      setxy random-xcor random-ycor
+      move-to one-of patches with [pcolor = blue]
+      set shape "person"
+      set color white
+      define-shopping-list
+      set nb-product-in-cart 0
+      set cart-value 0
+      set selected-strategy random 3 ; strategies from 0 to 3
+      set prob-for-change random-float max-prob-for-change
+      find-next-product
+      set next-destination first shopping-list
+      set nb-moves 0
+      set checkout-time 0
+    ]
+  ]
+end
+
+to define-shopping-list
+  set shopping-list []
+  let i 0
+  let length-shopping-list (random (max-length-shopping-list - 1)) + 1
+  loop [
+    if i = length-shopping-list
+    [
+      stop
+    ]
+    let selected-product (random (product-counter - 1)) + 1
+    if not member? selected-product shopping-list
+    [
+      set shopping-list lput selected-product shopping-list
+    ]
+    set i i + 1
+  ]
+end
+
+to find-next-product
+  let prev-dist 9999
+  let prod-next 9999
+  foreach shopping-list [id -> if dist-cust-to-prod id < prev-dist [set prod-next id set prev-dist dist-cust-to-prod id] ]
+  set next-destination prod-next
+  ;foreach shopping-list [id -> ask patches with [product-id = id] [set pcolor orange] ]
+  ;ask patches with [product-id = prod-next] [set pcolor pink set plabel "N"]
+end
+
+to-report dist-cust-to-prod [ id ]
+  let dist 99999
+  ask patches with [product-id = id] [set dist distance myself]
+  report dist
+end
+
 @#$#@#$#@
 GRAPHICS-WINDOW
 267
@@ -66,9 +127,9 @@ ticks
 
 BUTTON
 25
-33
-89
-66
+15
+90
+48
 Setup
 setup
 NIL
@@ -82,10 +143,10 @@ NIL
 1
 
 BUTTON
-99
-33
-162
-66
+100
+15
+165
+48
 Go
 go
 T
@@ -119,6 +180,83 @@ count patches with [pcolor = red]
 17
 1
 11
+
+SLIDER
+25
+100
+220
+133
+product-max-price
+product-max-price
+50
+200
+100.0
+1
+1
+$
+HORIZONTAL
+
+SLIDER
+25
+170
+220
+203
+max-customer-number
+max-customer-number
+1
+500
+1.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+25
+210
+220
+243
+max-prob-for-change
+max-prob-for-change
+0
+1
+0.11
+0.01
+1
+NIL
+HORIZONTAL
+
+SLIDER
+25
+250
+219
+283
+max-length-shopping-list
+max-length-shopping-list
+1
+50
+10.0
+1
+1
+NIL
+HORIZONTAL
+
+BUTTON
+175
+15
+240
+48
+Go Once
+go
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -479,5 +617,5 @@ true
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
 @#$#@#$#@
-0
+1
 @#$#@#$#@
