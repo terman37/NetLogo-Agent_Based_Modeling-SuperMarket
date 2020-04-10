@@ -1,10 +1,11 @@
 ;** global variables ********************
+
 globals [product-counter]
 
 patches-own [ product-price product-id]
 
 breed [customers customer]
-customers-own [shopping-list nb-product-in-cart cart-value selected-strategy prob-for-change next-destination nb-moves checkout-time]
+customers-own [shopping-list nb-product-in-cart cart-value selected-strategy prob-for-change next-destination nb-moves checkout-selected checkout-time direction]
 
 ;** setup *******************************
 
@@ -25,9 +26,9 @@ to setup-store-layout
   ; checkout stations (all closed)
   ask patches with [pxcor < 0 and pycor = -6 ] [ set pcolor red ]
   ; leave with no product
-  ask patch 0 -6 [ set pcolor green ]
+  ask patch 0 -6 [ set pcolor cyan ]
   ; create product places
-  ask patches with [pycor > 0 and member? ( pxcor mod 5 )  [0 1] and not member? ( pycor mod 12 )  [0 1 10 11] ]
+  ask patches with [pycor > 0 and member? ( pxcor mod 4 )  [2 3 ] and not member? ( pycor mod 12 )  [0 1] ]
     [ set pcolor yellow
       set product-price random product-max-price
       set product-id product-counter
@@ -37,18 +38,192 @@ end
 
 
 ;** run *********************************
+
 to go
   add-customer
-
+  move-customer
+  open-close-checkouts
   tick
 end
 
+; open or close checkout stations
+to open-close-checkouts
+  let tot-checkouts count patches with [pcolor = red or pcolor = green or pcolor = orange]
+  let step-size 1 / tot-checkouts * 100
+  if count patches with [pcolor = green] / tot-checkouts * 100 < percent-checkout-open [
+    ask one-of patches with [pcolor = red] [ set pcolor green]
+  ]
+  if count patches with [pcolor = green] / tot-checkouts * 100 - step-size > percent-checkout-open [
+    ask one-of patches with [pcolor = green] [ set pcolor orange]
+  ]
+  ; if queue length = 0 then turn it red
+  ask patches with [pcolor = orange] [
+    let xc pycor
+    if count customers with [checkout-selected = xc] = 0 [
+      set pcolor red
+    ]
+  ]
+end
+
+; move each customer
+to move-customer
+  ask customers [
+    enter-the-store
+    move-to-product
+    pick-product
+    move-to-checkout
+    select-checkout
+    enter-checkout-queue
+    move-in-the-queue
+    ; increase moves
+    set nb-moves nb-moves + 1
+  ]
+end
+
+; move out of entrance area
+to enter-the-store
+  ; go out of entrance zone (vertical move)
+  if pcolor = blue [
+    facexy xcor 0
+    fd 1
+  ]
+end
+
+; move to product and avoid obstacles
+to move-to-product
+  ; go to next product - in store move
+  let dest next-destination
+  if pcolor = black and not empty? shopping-list [
+    ; direction next product
+    face one-of patches with [product-id = dest]
+    ; avoid obstacle
+    ifelse [pcolor] of patch-ahead 1 != black [
+      ; define direction to avoid obstacle
+      ; find if product is above or below
+      if direction = "None" [
+        ifelse ycor < [pycor] of one-of patches with [product-id = dest] [
+          set direction "cw"
+        ][
+          set direction "ccw"
+        ]
+      ]
+      let angle 0
+      while [wall? angle direction] [set angle angle + 1]
+      ifelse direction = "ccw" [rt angle] [lt angle]
+      fd 1
+    ] [
+      set direction "None"
+      rt 0
+      fd 1
+    ]
+  ]
+end
+
+; pick a product, remove it from the shopping list and define next
+to pick-product
+  if not empty? shopping-list [
+    ; if destination reached -> remove product from list
+    let dest next-destination
+    if distance one-of patches with [product-id = dest] < 1 [
+      set nb-product-in-cart nb-product-in-cart + 1
+      set cart-value cart-value + [product-price] of one-of patches with [product-id = dest]
+      set shopping-list remove next-destination shopping-list
+      find-next-product
+      set direction "None"
+      ; nothing anymore to shop ?
+      if empty? shopping-list [
+        set color green
+      ]
+    ]
+  ]
+end
+
+; select checkout (implement different strategies)
+to select-checkout
+  if color = green and ycor < 1 [
+    if checkout-selected = 0 [
+      set checkout-selected [pxcor] of one-of patches with [pcolor = green]
+      set color orange
+    ]
+  ]
+  ; if too many people... then leave the store
+end
+
+; move to checkout avoiding obstacles
+to move-to-checkout
+  ; go to next product - in store move
+  if color = green or color = orange [
+    ; direction next product
+    ifelse color = green [
+      facexy xcor 0
+    ][
+     facexy checkout-selected 0
+    ]
+    ; avoid obstacle
+    ifelse [pcolor] of patch-ahead 1 != black [
+      ; define direction to avoid obstacle
+      ; find if product is above or below
+      if direction = "None" [
+        ifelse random 1 < 1 [
+          set direction "cw"
+        ][
+          set direction "ccw"
+        ]
+      ]
+      let angle 0
+      while [wall? angle direction] [set angle angle + 1]
+      ifelse direction = "ccw" [rt angle] [lt angle]
+      fd 1
+    ] [
+      set direction "None"
+      rt 0
+      fd 1
+    ]
+  ]
+end
+
+; enter the queue
+to enter-checkout-queue
+  if color = orange and distance patch checkout-selected 0 < 1 [
+    setxy checkout-selected -1
+    set color blue
+    set checkout-time 1
+  ]
+end
+
+; move in the queue
+to move-in-the-queue
+
+  if color = blue [
+    ;show who
+    ;show any? customers-on patch-at 0 -1
+    ;show count turtles-at 0 -1
+    if count turtles-at 0 -1 = 0 [
+      if pcolor != green and pcolor != orange [
+        setxy xcor (ycor - 1)
+      ]
+    ]
+  ]
+end
+
+; avoid the walls
+to-report wall? [angle direct]
+  ifelse direct = "ccw" [
+    report black != [pcolor] of patch-right-and-ahead angle 1
+  ] [
+    report black != [pcolor] of patch-left-and-ahead angle 1
+  ]
+end
+
+; let new customers enter the store
 to add-customer
   if count customers < max-customer-number
   [
-    create-customers 1 [
-      setxy random-xcor random-ycor
-      move-to one-of patches with [pcolor = blue]
+    create-customers random 2 [
+      ; initializing new customer
+      ;setxy random-xcor random-ycor
+      ;move-to one-of patches with [pcolor = blue]
+
       set shape "person"
       set color white
       define-shopping-list
@@ -57,13 +232,16 @@ to add-customer
       set selected-strategy random 3 ; strategies from 0 to 3
       set prob-for-change random-float max-prob-for-change
       find-next-product
-      set next-destination first shopping-list
+      set checkout-selected 0
       set nb-moves 0
       set checkout-time 0
+      set direction "None"
+      setxy one-of [pxcor] of patches with [pcolor = blue] one-of [pycor] of patches with [pcolor = blue]
     ]
   ]
 end
 
+; create the shopping list
 to define-shopping-list
   set shopping-list []
   let i 0
@@ -73,6 +251,7 @@ to define-shopping-list
     [
       stop
     ]
+    ;let selected-product (random product-counter - 1)
     let selected-product (random (product-counter - 1)) + 1
     if not member? selected-product shopping-list
     [
@@ -82,21 +261,24 @@ to define-shopping-list
   ]
 end
 
+; find the closest product in the store from the shopping list
 to find-next-product
   let prev-dist 9999
   let prod-next 9999
   foreach shopping-list [id -> if dist-cust-to-prod id < prev-dist [set prod-next id set prev-dist dist-cust-to-prod id] ]
+
   set next-destination prod-next
+  ;show prod-next
   ;foreach shopping-list [id -> ask patches with [product-id = id] [set pcolor orange] ]
   ;ask patches with [product-id = prod-next] [set pcolor pink set plabel "N"]
 end
 
+; measure distance from customer to product
 to-report dist-cust-to-prod [ id ]
   let dist 99999
   ask patches with [product-id = id] [set dist distance myself]
   report dist
 end
-
 @#$#@#$#@
 GRAPHICS-WINDOW
 267
@@ -188,9 +370,9 @@ SLIDER
 133
 product-max-price
 product-max-price
-50
-200
-100.0
+10
+100
+30.0
 1
 1
 $
@@ -205,7 +387,7 @@ max-customer-number
 max-customer-number
 1
 500
-1.0
+112.0
 1
 1
 NIL
@@ -220,7 +402,7 @@ max-prob-for-change
 max-prob-for-change
 0
 1
-0.11
+0.1
 0.01
 1
 NIL
@@ -235,7 +417,7 @@ max-length-shopping-list
 max-length-shopping-list
 1
 50
-10.0
+6.0
 1
 1
 NIL
@@ -257,6 +439,103 @@ NIL
 NIL
 NIL
 1
+
+MONITOR
+780
+135
+862
+180
+# customers
+count customers
+17
+1
+11
+
+PLOT
+900
+15
+1100
+165
+avg cart value
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"cart-value" 1.0 0 -3844592 true "" "plot mean [cart-value] of customers"
+
+PLOT
+900
+175
+1100
+325
+avg nb item in cart
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -13840069 true "" "plot mean [nb-product-in-cart] of customers"
+
+PLOT
+900
+335
+1100
+485
+avg nb moves per cust
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -11221820 true "" "plot mean [nb-moves] of customers"
+
+BUTTON
+135
+450
+222
+483
+NIL
+pen-down
+NIL
+1
+T
+TURTLE
+NIL
+NIL
+NIL
+NIL
+1
+
+SLIDER
+30
+335
+207
+368
+percent-checkout-open
+percent-checkout-open
+1
+100
+19.0
+1
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
