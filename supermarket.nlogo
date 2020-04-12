@@ -1,6 +1,6 @@
 ;** global variables ********************
 
-globals [product-counter nb-cust-out-tot nb-cust-no-pay money-earned money-missed]
+globals [product-counter nb-cust-out-tot nb-cust-no-pay money-earned money-missed checkout-cost]
 
 patches-own [ product-price product-id checkout-speed]
 
@@ -8,7 +8,6 @@ breed [customers customer]
 customers-own [shopping-list nb-product-in-cart cart-value selected-strategy prob-for-change next-destination nb-moves checkout-selected checkout-time direction]
 
 ;** setup *******************************
-
 to setup
   clear-all
   init-globals
@@ -22,6 +21,7 @@ to init-globals
   set nb-cust-no-pay 0
   set money-earned 0
   set money-missed 0
+  set checkout-cost 0
 end
 
 to setup-store-layout
@@ -38,7 +38,7 @@ to setup-store-layout
   ; create product places
   ask patches with [pycor > 0 and member? ( pxcor mod 4 )  [2 3 ] and not member? ( pycor mod 12 )  [0 1] ]
     [ set pcolor yellow
-      set product-price random product-max-price
+      set product-price random product-max-price + 1
       set product-id product-counter
       set product-counter product-counter + 1
     ]
@@ -50,8 +50,12 @@ to go
   add-customer
   move-customer
   open-close-checkouts
-
+  increment-checkout-cost
   tick
+end
+
+to increment-checkout-cost
+  set checkout-cost checkout-cost + count patches with [pcolor = green or pcolor = orange] * checkout-cost-per-hour / 500
 end
 
 to replace-cashiers
@@ -286,6 +290,7 @@ to move-in-the-queue
         setxy xcor (ycor - 1)
       ]
     ]
+    set checkout-time checkout-time + 1
   ]
 end
 
@@ -294,7 +299,7 @@ to leave-without-paying
   if pcolor = cyan [
     set nb-cust-out-tot nb-cust-out-tot + 1
     set nb-cust-no-pay nb-cust-no-pay + 1
-    set money-missed money-missed + cart-value
+    set money-missed money-missed + cart-value * product-margin / 100
     die
   ]
 end
@@ -305,7 +310,7 @@ to pay-and-leave
     set nb-product-in-cart nb-product-in-cart - checkout-speed
     if nb-product-in-cart <= 0 [
       set nb-cust-out-tot nb-cust-out-tot + 1
-      set money-earned money-earned + cart-value
+      set money-earned money-earned + cart-value * product-margin / 100
       die
     ]
   ]
@@ -385,9 +390,9 @@ end
 @#$#@#$#@
 GRAPHICS-WINDOW
 330
-60
+55
 788
-534
+529
 -1
 -1
 15.0
@@ -445,9 +450,9 @@ NIL
 0
 
 MONITOR
-565
+585
 10
-715
+735
 55
 # products ref in store
 count patches with [pcolor = yellow]
@@ -456,21 +461,21 @@ count patches with [pcolor = yellow]
 11
 
 MONITOR
-360
+655
 540
-510
+770
 585
-# checkout stations closed
+# checkout closed
 count patches with [pcolor = red or pcolor = orange]
 17
 1
 11
 
 SLIDER
-25
-120
-220
-153
+60
+165
+255
+198
 product-max-price
 product-max-price
 1
@@ -482,25 +487,25 @@ $
 HORIZONTAL
 
 SLIDER
-25
-160
-220
-193
+60
+265
+255
+298
 max-customer-number
 max-customer-number
 1
 1000
-200.0
+150.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-25
-305
-220
-338
+60
+405
+255
+438
 max-prob-for-change
 max-prob-for-change
 0
@@ -512,15 +517,15 @@ max-prob-for-change
 HORIZONTAL
 
 SLIDER
-25
-265
-219
-298
+60
+365
+254
+398
 max-length-shopping-list
 max-length-shopping-list
 1
 100
-30.0
+50.0
 1
 1
 NIL
@@ -544,10 +549,10 @@ NIL
 1
 
 PLOT
-795
-155
+790
+75
 1010
-305
+225
 avg cart value
 NIL
 NIL
@@ -562,10 +567,10 @@ PENS
 "cart-value" 1.0 0 -3844592 true "" "plot mean [cart-value] of customers"
 
 PLOT
-795
-310
+790
+225
 1010
-450
+365
 avg nb item in cart
 NIL
 NIL
@@ -597,92 +602,92 @@ NIL
 1
 
 SLIDER
-25
-375
-220
-408
+350
+545
+525
+578
 percent-checkout-open
 percent-checkout-open
 1
 100
-39.0
+38.0
 1
 1
 %
 HORIZONTAL
 
 SLIDER
-25
-455
-220
-488
+55
+510
+250
+543
 customer-patience
 customer-patience
 0
 100
-50.0
+25.0
 1
 1
 %
 HORIZONTAL
 
 TEXTBOX
-25
-105
-250
-131
-Max product price: calibrate to avg cart value
+45
+150
+270
+176
+Products:
 11
 0.0
 1
 
 TEXTBOX
-30
-250
-180
-268
+45
+350
+195
+368
 Shopping list:
 11
 0.0
 1
 
 TEXTBOX
-30
-360
-180
-378
+45
+455
+195
+473
 Checkout:
 11
 0.0
 1
 
 MONITOR
-1275
-20
-1470
-65
+1235
+370
+1380
+415
 $ missed
 money-missed
-17
+1
 1
 11
 
 MONITOR
-1065
-20
-1260
-65
+1030
+170
+1155
+215
 $ earned
 money-earned
-17
+1
 1
 11
 
 MONITOR
-1065
-70
-1260
-115
+1235
+560
+1380
+605
 # customers out
 nb-cust-out-tot
 17
@@ -690,10 +695,10 @@ nb-cust-out-tot
 11
 
 MONITOR
-1275
-70
-1470
-115
+1075
+370
+1235
+415
 # customers not paying
 nb-cust-no-pay
 17
@@ -701,12 +706,12 @@ nb-cust-no-pay
 11
 
 PLOT
-1280
-440
-1475
-590
+1075
+220
+1380
+370
 % customer leaving without paying
-NIL
+time
 NIL
 0.0
 10.0
@@ -719,10 +724,10 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot nb-cust-no-pay / nb-cust-out-tot * 100"
 
 PLOT
-1280
-295
-1475
-435
+1075
+420
+1380
+560
 # customers in store
 NIL
 NIL
@@ -737,36 +742,36 @@ PENS
 "default" 1.0 0 -13791810 true "" "plot count customers"
 
 SLIDER
-25
-415
-220
-448
+55
+470
+210
+503
 avg-checkout-speed
 avg-checkout-speed
 0.1
 3
-2.0
+1.5
 .1
 1
 NIL
 HORIZONTAL
 
 MONITOR
-515
+535
 540
-665
+650
 585
-# checkout stations opened
+# checkout opened
 count patches with [pcolor = green]
 17
 1
 11
 
 SLIDER
-25
-200
-220
-233
+60
+305
+255
+338
 max-entrance-speed
 max-entrance-speed
 0
@@ -778,10 +783,10 @@ NIL
 HORIZONTAL
 
 BUTTON
-225
-415
-320
-448
+210
+470
+305
+503
 NIL
 replace-cashiers
 NIL
@@ -795,11 +800,11 @@ NIL
 1
 
 PLOT
-795
-455
+790
+365
 1010
-595
-time spent in store (minutes)
+505
+avg time spent in store (minutes)
 NIL
 NIL
 0.0
@@ -813,53 +818,170 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot (mean [nb-moves] of customers) / 500 * 60"
 
 TEXTBOX
-335
-40
-485
-58
-Time Scale 500 ticks = 1 hour
+345
+25
+495
+43
+Time Scale 500 ticks ~ 1 hour
 11
 0.0
 1
 
 SLIDER
-25
-55
-220
-88
+60
+90
+255
+123
 nb-hours-before-stop
 nb-hours-before-stop
 2
 50
-2.0
+8.0
 1
 1
 NIL
 HORIZONTAL
 
 SLIDER
-25
-495
-220
-528
+55
+550
+250
+583
 checkout-cost-per-hour
 checkout-cost-per-hour
 5
 50
-10.0
+25.0
 1
 1
 $
 HORIZONTAL
 
+SLIDER
+60
+205
+255
+238
+product-margin
+product-margin
+0
+20
+2.0
+1
+1
+%
+HORIZONTAL
+
+MONITOR
+1155
+170
+1285
+215
+$ cost for checkout
+checkout-cost
+1
+1
+11
+
+PLOT
+1030
+10
+1420
+170
+$ final
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+true
+"" ""
+PENS
+"real" 1.0 0 -2674135 true "" "plot money-earned - checkout-cost"
+"without missed" 1.0 0 -11085214 true "" "plot money-earned - checkout-cost + money-missed"
+
+MONITOR
+1075
+560
+1235
+605
+# customers inside
+count customers
+17
+1
+11
+
+TEXTBOX
+25
+70
+175
+88
+Settings:
+11
+104.0
+1
+
+TEXTBOX
+45
+250
+195
+268
+Customers:
+11
+0.0
+1
+
+MONITOR
+1285
+170
+1420
+215
+$ final
+money-earned - checkout-cost
+1
+1
+11
+
 @#$#@#$#@
 ## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+The main idea of the model is to simulate a supermarket
+and especially how the number of checkout station opened can influence the final result.
+if many people are upset because of the queue at checkout, they leave the store without paying. 
 
 ## HOW IT WORKS
 
-(what rules the agents use to create the overall behavior of the model)
+In the Setup phase, layout for the store is created:
+...blue zone: entrance for new customers
+...yellow zones: products (each patch is a different product)
+...grey zone: queuing zone for checkout
+...red patches: checkout stations
+...cyan patch: station to leave without product
+
+Then customers can enter the store...
+
+Each customer:
+-- goes in the store with a defined shopping list	
+-- moves to the closest product
+-- pick it and add it to his cart
+-- goes to the following closest product
+ ...
+-- until shopping list is over
+-- if he forgot something in his list, he can add it and go pick it
+-- moves towards the checkout stations
+-- select one opened checkout station following his strategy:
+...- closest queue
+...- queue with less customers
+...- queue with less product in cart of waiting customers
+...- randomly (he doesn't care)
+-- go to the selected queue
+-- if too many people in the queue he decides:
+...- to leave the store without the cart (missed money for the store)
+...- to select another one (if he still has some patience...)
+-- when in the queue, he waits for his time to go
+-- he pays the cart and leave the store
 
 ## HOW TO USE IT
 
@@ -867,7 +989,7 @@ HORIZONTAL
 
 ## THINGS TO NOTICE
 
-(suggested things for the user to notice while running the model)
+I had no info regarding product prices, margins, checkout speed, checkout costs, so it may not be realistic or accurate. I made the model using my own experience as a supermarket customer... 
 
 ## THINGS TO TRY
 
@@ -875,15 +997,17 @@ HORIZONTAL
 
 ## EXTENDING THE MODEL
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
+Model is quite easily extendable to match a real store (many more products, other layout), I think layout editor for the store could be easily implemented modifying a little bit the "Pac-Man Level Editor" in models library
 
-## NETLOGO FEATURES
-
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
+Another thing that would make model more realistic would be to add stock management for each item. when customer pick one product, its stock decrease. then other agents coud be created to refill the products in the store.
 
 ## RELATED MODELS
 
-(models in the NetLogo Models Library and elsewhere which are of related interest)
+I was inspired by some existing models (especially for moving customers in the store):
+in Models Library:
+... Look Ahead Example
+... Move Towards Target Example
+... Wall Following Example
 
 ## CREDITS AND REFERENCES
 
