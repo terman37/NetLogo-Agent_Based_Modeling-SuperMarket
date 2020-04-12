@@ -1,8 +1,8 @@
 ;** global variables ********************
 
-globals [product-counter]
+globals [product-counter nb-cust-out-tot nb-cust-no-pay money-earned money-missed]
 
-patches-own [ product-price product-id]
+patches-own [ product-price product-id checkout-speed]
 
 breed [customers customer]
 customers-own [shopping-list nb-product-in-cart cart-value selected-strategy prob-for-change next-destination nb-moves checkout-selected checkout-time direction]
@@ -11,9 +11,17 @@ customers-own [shopping-list nb-product-in-cart cart-value selected-strategy pro
 
 to setup
   clear-all
-  set product-counter 0
+  init-globals
   setup-store-layout
   reset-ticks
+end
+
+to init-globals
+  set product-counter 0
+  set nb-cust-out-tot 0
+  set nb-cust-no-pay 0
+  set money-earned 0
+  set money-missed 0
 end
 
 to setup-store-layout
@@ -36,14 +44,21 @@ to setup-store-layout
     ]
 end
 
-
 ;** run *********************************
-
 to go
+  if ticks >= nb-hours-before-stop * 500 [ stop ]
   add-customer
   move-customer
   open-close-checkouts
+
   tick
+end
+
+to replace-cashiers
+  ask patches with [ pcolor = green ][
+    let speed avg-checkout-speed - 0.5 + random-float 1
+    set checkout-speed speed
+  ]
 end
 
 ; open or close checkout stations
@@ -51,15 +66,20 @@ to open-close-checkouts
   let tot-checkouts count patches with [pcolor = red or pcolor = green or pcolor = orange]
   let step-size 1 / tot-checkouts * 100
   if count patches with [pcolor = green] / tot-checkouts * 100 < percent-checkout-open [
-    ask one-of patches with [pcolor = red] [ set pcolor green]
+    ask one-of patches with [pcolor = red or pcolor = orange] [
+      set pcolor green
+      ;let speed ((random-float max-checkout-speed) + .5)
+      let speed avg-checkout-speed - 0.5 + random-float 1
+      set checkout-speed speed
+    ]
   ]
   if count patches with [pcolor = green] / tot-checkouts * 100 - step-size > percent-checkout-open [
     ask one-of patches with [pcolor = green] [ set pcolor orange]
   ]
   ; if queue length = 0 then turn it red
   ask patches with [pcolor = orange] [
-    let xc pycor
-    if count customers with [checkout-selected = xc] = 0 [
+   let xc pxcor
+   if count customers with [checkout-selected = xc] = 0 [
       set pcolor red
     ]
   ]
@@ -75,6 +95,8 @@ to move-customer
     select-checkout
     enter-checkout-queue
     move-in-the-queue
+    leave-without-paying
+    pay-and-leave
     ; increase moves
     set nb-moves nb-moves + 1
   ]
@@ -130,23 +152,74 @@ to pick-product
       set shopping-list remove next-destination shopping-list
       find-next-product
       set direction "None"
-      ; nothing anymore to shop ?
+      ; nothing anymore to shop
       if empty? shopping-list [
-        set color green
+        ; forgotten product - last minute addition
+        ifelse random 100 < max-prob-for-change [
+          let selected-product (random (product-counter - 1)) + 1
+          set shopping-list lput selected-product shopping-list
+          set next-destination selected-product
+        ][
+          set color green
+        ]
       ]
     ]
   ]
 end
 
-; select checkout (implement different strategies)
+; select checkout
 to select-checkout
   if color = green and ycor < 1 [
-    if checkout-selected = 0 [
-      set checkout-selected [pxcor] of one-of patches with [pcolor = green]
-      set color orange
+    if selected-strategy = 0 [
+      ; random strategy
+      if checkout-selected = "None" [
+        set checkout-selected [pxcor] of one-of patches with [pcolor = green]
+      ]
     ]
+    if selected-strategy = 1 [
+      ; closest checkout strategy
+      let min-dist 9999
+      let selection 0
+      ask patches with [pcolor = green] [
+        let dist distance myself
+        if dist < min-dist [
+          set min-dist dist
+          set selection pxcor
+        ]
+      ]
+      set checkout-selected selection
+    ]
+    if selected-strategy = 2 [
+      ; less article startegy
+      let min-nb 9999
+      let selection 0
+      ask patches with [pcolor = green] [
+        let nb 0
+        ask customers with [checkout-selected = pxcor] [set nb nb + nb-product-in-cart]
+        if nb < min-nb [
+          set min-nb nb
+          set selection pxcor
+        ]
+      ]
+      set checkout-selected selection
+    ]
+    if selected-strategy = 3 [
+      ; less crowded stategy
+      let min-cust 9999
+      let selection 0
+      ask patches with [pcolor = green] [
+        let nb 9999
+        let x pxcor
+        set nb count customers with [checkout-selected = x]
+        if nb < min-cust [
+          set min-cust nb
+          set selection pxcor
+        ]
+      ]
+      set checkout-selected selection
+    ]
+    set color orange
   ]
-  ; if too many people... then leave the store
 end
 
 ; move to checkout avoiding obstacles
@@ -185,23 +258,55 @@ end
 ; enter the queue
 to enter-checkout-queue
   if color = orange and distance patch checkout-selected 0 < 1 [
-    setxy checkout-selected -1
-    set color blue
-    set checkout-time 1
+    ; if queue is full then leave the store (maybe add probability to select another one ?)
+    ifelse any? customers-on patch checkout-selected -1 [
+      ifelse random 100 < customer-patience [
+        set color green
+        set checkout-selected "None"
+        set selected-strategy 2
+      ] [
+        set checkout-selected 0
+      ]
+    ][
+      setxy checkout-selected -1
+      set color blue
+      set checkout-time 1
+    ]
   ]
 end
 
 ; move in the queue
 to move-in-the-queue
-
   if color = blue [
     ;show who
     ;show any? customers-on patch-at 0 -1
     ;show count turtles-at 0 -1
-    if count turtles-at 0 -1 = 0 [
-      if pcolor != green and pcolor != orange [
+    if count customers-at 0 -1 = 0 [
+      if pcolor != green and pcolor != orange and pcolor != cyan[
         setxy xcor (ycor - 1)
       ]
+    ]
+  ]
+end
+
+; upset clients leaving the store without paying
+to leave-without-paying
+  if pcolor = cyan [
+    set nb-cust-out-tot nb-cust-out-tot + 1
+    set nb-cust-no-pay nb-cust-no-pay + 1
+    set money-missed money-missed + cart-value
+    die
+  ]
+end
+
+; checkout process
+to pay-and-leave
+  if pcolor = green or pcolor = orange [
+    set nb-product-in-cart nb-product-in-cart - checkout-speed
+    if nb-product-in-cart <= 0 [
+      set nb-cust-out-tot nb-cust-out-tot + 1
+      set money-earned money-earned + cart-value
+      die
     ]
   ]
 end
@@ -219,20 +324,19 @@ end
 to add-customer
   if count customers < max-customer-number
   [
-    create-customers random 2 [
+    create-customers random max-entrance-speed [
       ; initializing new customer
       ;setxy random-xcor random-ycor
       ;move-to one-of patches with [pcolor = blue]
-
       set shape "person"
       set color white
       define-shopping-list
       set nb-product-in-cart 0
       set cart-value 0
       set selected-strategy random 3 ; strategies from 0 to 3
-      set prob-for-change random-float max-prob-for-change
+      set prob-for-change random max-prob-for-change
       find-next-product
-      set checkout-selected 0
+      set checkout-selected "None"
       set nb-moves 0
       set checkout-time 0
       set direction "None"
@@ -266,7 +370,6 @@ to find-next-product
   let prev-dist 9999
   let prod-next 9999
   foreach shopping-list [id -> if dist-cust-to-prod id < prev-dist [set prod-next id set prev-dist dist-cust-to-prod id] ]
-
   set next-destination prod-next
   ;show prod-next
   ;foreach shopping-list [id -> ask patches with [product-id = id] [set pcolor orange] ]
@@ -281,10 +384,10 @@ to-report dist-cust-to-prod [ id ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-267
-14
-725
-488
+330
+60
+788
+534
 -1
 -1
 15.0
@@ -301,8 +404,8 @@ GRAPHICS-WINDOW
 5
 -6
 24
-0
-0
+1
+1
 1
 ticks
 30.0
@@ -342,37 +445,37 @@ NIL
 0
 
 MONITOR
-733
-15
-864
-60
-# total products
+565
+10
+715
+55
+# products ref in store
 count patches with [pcolor = yellow]
 17
 1
 11
 
 MONITOR
-733
-64
-864
-109
-# total checkout stations
-count patches with [pcolor = red]
+360
+540
+510
+585
+# checkout stations closed
+count patches with [pcolor = red or pcolor = orange]
 17
 1
 11
 
 SLIDER
 25
-100
+120
 220
-133
+153
 product-max-price
 product-max-price
-10
-100
-30.0
+1
+50
+15.0
 1
 1
 $
@@ -380,14 +483,14 @@ HORIZONTAL
 
 SLIDER
 25
-170
+160
 220
-203
+193
 max-customer-number
 max-customer-number
 1
-500
-112.0
+1000
+200.0
 1
 1
 NIL
@@ -395,29 +498,29 @@ HORIZONTAL
 
 SLIDER
 25
-210
+305
 220
-243
+338
 max-prob-for-change
 max-prob-for-change
 0
+99
+10.0
 1
-0.1
-0.01
 1
-NIL
+%
 HORIZONTAL
 
 SLIDER
 25
-250
+265
 219
-283
+298
 max-length-shopping-list
 max-length-shopping-list
 1
-50
-6.0
+100
+30.0
 1
 1
 NIL
@@ -440,22 +543,11 @@ NIL
 NIL
 1
 
-MONITOR
-780
-135
-862
-180
-# customers
-count customers
-17
-1
-11
-
 PLOT
-900
-15
-1100
-165
+795
+155
+1010
+305
 avg cart value
 NIL
 NIL
@@ -470,10 +562,10 @@ PENS
 "cart-value" 1.0 0 -3844592 true "" "plot mean [cart-value] of customers"
 
 PLOT
-900
-175
-1100
-325
+795
+310
+1010
+450
 avg nb item in cart
 NIL
 NIL
@@ -487,29 +579,11 @@ false
 PENS
 "default" 1.0 0 -13840069 true "" "plot mean [nb-product-in-cart] of customers"
 
-PLOT
-900
-335
-1100
-485
-avg nb moves per cust
-NIL
-NIL
-0.0
-10.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"default" 1.0 0 -11221820 true "" "plot mean [nb-moves] of customers"
-
 BUTTON
-135
-450
-222
-483
+250
+15
+315
+48
 NIL
 pen-down
 NIL
@@ -523,18 +597,259 @@ NIL
 1
 
 SLIDER
-30
-335
-207
-368
+25
+375
+220
+408
 percent-checkout-open
 percent-checkout-open
 1
 100
-19.0
+39.0
+1
+1
+%
+HORIZONTAL
+
+SLIDER
+25
+455
+220
+488
+customer-patience
+customer-patience
+0
+100
+50.0
+1
+1
+%
+HORIZONTAL
+
+TEXTBOX
+25
+105
+250
+131
+Max product price: calibrate to avg cart value
+11
+0.0
+1
+
+TEXTBOX
+30
+250
+180
+268
+Shopping list:
+11
+0.0
+1
+
+TEXTBOX
+30
+360
+180
+378
+Checkout:
+11
+0.0
+1
+
+MONITOR
+1275
+20
+1470
+65
+$ missed
+money-missed
+17
+1
+11
+
+MONITOR
+1065
+20
+1260
+65
+$ earned
+money-earned
+17
+1
+11
+
+MONITOR
+1065
+70
+1260
+115
+# customers out
+nb-cust-out-tot
+17
+1
+11
+
+MONITOR
+1275
+70
+1470
+115
+# customers not paying
+nb-cust-no-pay
+17
+1
+11
+
+PLOT
+1280
+440
+1475
+590
+% customer leaving without paying
+NIL
+NIL
+0.0
+10.0
+0.0
+100.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot nb-cust-no-pay / nb-cust-out-tot * 100"
+
+PLOT
+1280
+295
+1475
+435
+# customers in store
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -13791810 true "" "plot count customers"
+
+SLIDER
+25
+415
+220
+448
+avg-checkout-speed
+avg-checkout-speed
+0.1
+3
+2.0
+.1
+1
+NIL
+HORIZONTAL
+
+MONITOR
+515
+540
+665
+585
+# checkout stations opened
+count patches with [pcolor = green]
+17
+1
+11
+
+SLIDER
+25
+200
+220
+233
+max-entrance-speed
+max-entrance-speed
+0
+20
+5.0
 1
 1
 NIL
+HORIZONTAL
+
+BUTTON
+225
+415
+320
+448
+NIL
+replace-cashiers
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+PLOT
+795
+455
+1010
+595
+time spent in store (minutes)
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot (mean [nb-moves] of customers) / 500 * 60"
+
+TEXTBOX
+335
+40
+485
+58
+Time Scale 500 ticks = 1 hour
+11
+0.0
+1
+
+SLIDER
+25
+55
+220
+88
+nb-hours-before-stop
+nb-hours-before-stop
+2
+50
+2.0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+25
+495
+220
+528
+checkout-cost-per-hour
+checkout-cost-per-hour
+5
+50
+10.0
+1
+1
+$
 HORIZONTAL
 
 @#$#@#$#@
