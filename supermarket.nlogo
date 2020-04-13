@@ -495,7 +495,7 @@ max-customer-number
 max-customer-number
 1
 1000
-150.0
+200.0
 1
 1
 NIL
@@ -610,7 +610,7 @@ percent-checkout-open
 percent-checkout-open
 1
 100
-38.0
+50.0
 1
 1
 %
@@ -836,7 +836,7 @@ nb-hours-before-stop
 nb-hours-before-stop
 2
 50
-8.0
+3.0
 1
 1
 NIL
@@ -960,7 +960,7 @@ In the Setup phase, layout for the store is created:
 ...red patches: checkout stations
 ...cyan patch: station to leave without product
 
-Then customers can enter the store...
+When ready, then customers can enter the store...
 
 Each customer:
 -- goes in the store with a defined shopping list	
@@ -980,20 +980,43 @@ Each customer:
 -- if too many people in the queue he decides:
 ...- to leave the store without the cart (missed money for the store)
 ...- to select another one (if he still has some patience...)
--- when in the queue, he waits for his time to go
+-- when in the queue, he waits for his turn (each queue has a different speed...)
 -- he pays the cart and leave the store
 
 ## HOW TO USE IT
 
-(how to use the model, including a description of each of the items in the Interface tab)
+The time scale to make the result more readable is 500 ticks = 1 hour
+
+nb-hours-before-stop: nb of ticks ( /500 ) before to stop the simlation
+
+product-max-price: maximum product price, price for products are given randomly between 1 and product-max-price + 1. Prices are defined during the setup. When simulation is running prices stay as thay are
+
+product-margin: define how many money the store earned for each cart. it should be understood as the product margin including all store costs except the checkout costs, as it is our zone of interest.
+
+max-customer-number: max number of customers allowed in the store.
+
+max-entrance-speed: nb of customers that can be created at each tick, allow to manage customer flow. 
+
+max-length-shopping-list: maxnumber of product that will be included in the customer shopping list
+
+max-prob-for-change: maximum probability that customer has forgotten something in the list and will add it at the end.
+
+avg-checkout-speed: each checkout station has a speed to take products from the cart. the speed is setup at checkout opening. If needed, if you increase/decrease the speed, you can renew cashiers and setup new checkout speed for all.
+
+customer-patience: define the probability for the customer to select another checkout queue if too many people in the one he has selected. 
+
+checkout-cost-per-hour: cost (per hour ~500 ticks) for each checkout station, this allow to penalize the result when too many checkout stations are opened.
+
+percent-checkout-open: percentage of checkout station to open, when nb of opened checkout is decreasing, customers in the queue can still continue but no new one is allowed.
 
 ## THINGS TO NOTICE
 
-I had no info regarding product prices, margins, checkout speed, checkout costs, so it may not be realistic or accurate. I made the model using my own experience as a supermarket customer... 
+I had no info regarding product prices, margins, checkout speed, checkout costs, so it may not be realistic or accurate. 
+I made the model using my own experience as a supermarket customer... 
 
 ## THINGS TO TRY
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
+It's a good exercise (almost a game) to fix the parameters and try to maximize the money earned by the store by just playing on the nb of checkout stations opened/closed.
 
 ## EXTENDING THE MODEL
 
@@ -1011,7 +1034,7 @@ in Models Library:
 
 ## CREDITS AND REFERENCES
 
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+A big thanks to my wife for supporting me during this confinement, especially when i ask her to test/criticize my supermarket.
 @#$#@#$#@
 default
 true
