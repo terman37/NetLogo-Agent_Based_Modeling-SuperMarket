@@ -721,7 +721,7 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot nb-cust-no-pay / nb-cust-out-tot * 100"
+"default" 1.0 0 -16777216 true "" "plot nb-cust-no-pay / (nb-cust-out-tot + 1) * 100"
 
 PLOT
 1075
