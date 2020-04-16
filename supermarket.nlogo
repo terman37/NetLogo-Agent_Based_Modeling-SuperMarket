@@ -1,6 +1,6 @@
 ;** global variables ********************
 
-globals [product-counter nb-cust-out-tot nb-cust-no-pay money-earned money-missed checkout-cost]
+globals [product-counter nb-cust-out-tot nb-cust-no-pay money-earned money-missed checkout-cost tot-checkout-time avg-checkout-time]
 
 patches-own [ product-price product-id checkout-speed]
 
@@ -235,6 +235,7 @@ to move-to-checkout
       facexy xcor 0
     ][
      facexy checkout-selected 0
+     set checkout-time checkout-time + 1
     ]
     ; avoid obstacle
     ifelse [pcolor] of patch-ahead 1 != black [
@@ -274,7 +275,7 @@ to enter-checkout-queue
     ][
       setxy checkout-selected -1
       set color blue
-      set checkout-time 1
+      set checkout-time checkout-time + 1
     ]
   ]
 end
@@ -310,6 +311,8 @@ to pay-and-leave
     set nb-product-in-cart nb-product-in-cart - checkout-speed
     if nb-product-in-cart <= 0 [
       set nb-cust-out-tot nb-cust-out-tot + 1
+      set tot-checkout-time tot-checkout-time + checkout-time
+      set avg-checkout-time tot-checkout-time / (nb-cust-out-tot - nb-cust-no-pay)
       set money-earned money-earned + cart-value * product-margin / 100
       die
     ]
@@ -416,9 +419,9 @@ ticks
 30.0
 
 BUTTON
-25
+50
 15
-90
+115
 48
 Setup
 setup
@@ -433,9 +436,9 @@ NIL
 1
 
 BUTTON
-100
+125
 15
-165
+190
 48
 Go
 go
@@ -532,9 +535,9 @@ NIL
 HORIZONTAL
 
 BUTTON
-175
+200
 15
-240
+265
 48
 Go Once
 go
@@ -550,9 +553,9 @@ NIL
 
 PLOT
 790
-75
-1010
-225
+20
+1045
+170
 avg cart value
 NIL
 NIL
@@ -564,13 +567,13 @@ true
 false
 "" ""
 PENS
-"cart-value" 1.0 0 -3844592 true "" "plot mean [cart-value] of customers"
+"cart-value" 1.0 0 -2674135 true "" "plot mean [cart-value] of customers"
 
 PLOT
 790
-225
-1010
-365
+170
+1045
+310
 avg nb item in cart
 NIL
 NIL
@@ -584,23 +587,6 @@ false
 PENS
 "default" 1.0 0 -13840069 true "" "plot mean [nb-product-in-cart] of customers"
 
-BUTTON
-250
-15
-315
-48
-NIL
-pen-down
-NIL
-1
-T
-TURTLE
-NIL
-NIL
-NIL
-NIL
-1
-
 SLIDER
 350
 545
@@ -610,7 +596,7 @@ percent-checkout-open
 percent-checkout-open
 1
 100
-50.0
+19.0
 1
 1
 %
@@ -662,9 +648,9 @@ Checkout:
 1
 
 MONITOR
-1235
+1265
 370
-1380
+1410
 415
 $ missed
 money-missed
@@ -673,9 +659,9 @@ money-missed
 11
 
 MONITOR
-1030
+1060
 170
-1155
+1185
 215
 $ earned
 money-earned
@@ -684,9 +670,9 @@ money-earned
 11
 
 MONITOR
-1235
+1265
 560
-1380
+1410
 605
 # customers out
 nb-cust-out-tot
@@ -695,9 +681,9 @@ nb-cust-out-tot
 11
 
 MONITOR
-1075
+1105
 370
-1235
+1265
 415
 # customers not paying
 nb-cust-no-pay
@@ -706,9 +692,9 @@ nb-cust-no-pay
 11
 
 PLOT
-1075
+1105
 220
-1380
+1410
 370
 % customer leaving without paying
 time
@@ -721,12 +707,12 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot nb-cust-no-pay / (nb-cust-out-tot + 1) * 100"
+"default" 1.0 0 -14454117 true "" "plot nb-cust-no-pay / (nb-cust-out-tot + 0.1) * 100"
 
 PLOT
-1075
+1105
 420
-1380
+1410
 560
 # customers in store
 NIL
@@ -750,7 +736,7 @@ avg-checkout-speed
 avg-checkout-speed
 0.1
 3
-1.5
+1.0
 .1
 1
 NIL
@@ -801,9 +787,9 @@ NIL
 
 PLOT
 790
-365
-1010
-505
+310
+1045
+450
 avg time spent in store (minutes)
 NIL
 NIL
@@ -815,7 +801,7 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot (mean [nb-moves] of customers) / 500 * 60"
+"default" 1.0 0 -5825686 true "" "plot (mean [nb-moves] of customers ) / 500 * 60"
 
 TEXTBOX
 345
@@ -836,7 +822,7 @@ nb-hours-before-stop
 nb-hours-before-stop
 2
 50
-3.0
+8.0
 1
 1
 NIL
@@ -873,9 +859,9 @@ product-margin
 HORIZONTAL
 
 MONITOR
-1155
+1185
 170
-1285
+1315
 215
 $ cost for checkout
 checkout-cost
@@ -884,9 +870,9 @@ checkout-cost
 11
 
 PLOT
-1030
+1060
 10
-1420
+1450
 170
 $ final
 NIL
@@ -903,9 +889,9 @@ PENS
 "without missed" 1.0 0 -11085214 true "" "plot money-earned - checkout-cost + money-missed"
 
 MONITOR
-1075
+1105
 560
-1235
+1265
 605
 # customers inside
 count customers
@@ -934,15 +920,33 @@ Customers:
 1
 
 MONITOR
-1285
+1315
 170
-1420
+1450
 215
 $ final
 money-earned - checkout-cost
 1
 1
 11
+
+PLOT
+790
+450
+1045
+590
+current time in checkout queue (minutes)
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -5825686 true "" "plot ((sum [checkout-time] of customers with [pcolor = green]) / (count customers with [pcolor = green] + 0.1)) / 500 * 60"
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -957,7 +961,7 @@ In the Setup phase, layout for the store is created:
 ...blue zone: entrance for new customers
 ...yellow zones: products (each patch is a different product)
 ...grey zone: queuing zone for checkout
-...red patches: checkout stations
+...red patches: checkout stations (turn green when open)
 ...cyan patch: station to leave without product
 
 When ready, then customers can enter the store...
@@ -1016,7 +1020,7 @@ I made the model using my own experience as a supermarket customer...
 
 ## THINGS TO TRY
 
-It's a good exercise (almost a game) to fix the parameters and try to maximize the money earned by the store by just playing on the nb of checkout stations opened/closed.
+It's a good exercise (almost a game) to fix the parameters and try to maximize the money earned by the store by just playing on the number of checkout stations opened/closed.
 
 ## EXTENDING THE MODEL
 
