@@ -1,4 +1,4 @@
-# NetLogo - Agent based Modeling - 
+# NetLogo - Agent based Modeling - SuperMarket
 
 Netlogo model showing how the number of checkout station opened can influence the result of the store.
 
